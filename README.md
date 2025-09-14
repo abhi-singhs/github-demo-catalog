@@ -1,95 +1,135 @@
+<div align="center">
+
 # GitHub Demo Catalog
 
-Client-side Next.js (App Router) application that enumerates a repository's issue templates, lets you quickly create "demo" issues from them, and tracks those demo issues (labeled `demo`) for easy launching or closing.
+Small client‑side Next.js (App Router) dashboard that discovers a repository's issue templates, lets you spin up "demo" issues from them, and manages those demo issues (labeled `demo`) with fast feedback, accessibility-first UI, and zero backend.
 
-## Features
+</div>
 
-* Pure client-side usage of the GitHub REST API via Octokit (no backend server).
-* Repository fixed to `octodemo/bootstrap` for simplicity.
-* Discovers both Issue Form YAML templates and legacy Markdown templates.
-* Creates demo issues with predictable title prefix `Demo ::` and label `demo`.
-* Lists only your open demo issues (filtered by authenticated user once resolved) with quick open / close actions.
-* Extracts the first GitHub repository URL found in body or first comment to deep-link into demo repos.
-* Light/Dark theme toggle.
-* Caching of template metadata in-memory per session (reduces repeated API calls under React Strict Mode dev re-renders).
+## At a Glance
 
-## Personal Access Token (PAT) & Security
+| Category | Highlights |
+|----------|------------|
+| Data Source | Pure browser usage of GitHub REST via Octokit (no server) |
+| Target Repo | Hard‑coded: `octodemo/bootstrap` (changeable in code) |
+| Demo Issues | Title prefix `Demo ::`; label `demo`; optional hold label `demo::lifecycle_hold` |
+| Feedback | Toast notifications (success / error / info) + optimistic updates |
+| Performance | In‑memory template cache + lightweight polling for issues |
+| Accessibility | Skip link, semantic roles, aria-live regions, reduced‑motion safe animations |
+| Theming | Light/Dark toggle with early flash prevention |
+
+## Current Features
+
+* 🔍 Template discovery for both Issue Form YAML and legacy Markdown templates.
+* 🆕 One‑click creation flow opens GitHub's native new‑issue UI with the chosen template.
+* 🗂️ Structured demo issues list with:
+	* Relative timestamps (e.g. "3m ago").
+	* HOLD state badge when `demo::lifecycle_hold` label is applied.
+	* Fast close + hold/unhold actions (optimistic for close; label toggle with toast feedback).
+	* Automatic periodic refresh (light polling) plus manual Refresh button.
+	* Skeleton loaders & subtle spinners to indicate background work (with proper aria semantics).
+* 🔔 Toast notification system:
+	* Success / error / info variants.
+	* Auto‑dismiss (5s) + focusable container for assistive tech.
+	* Announces via `role=alert` / `role=status` depending on variant.
+* 🧭 Compact stats header showing counts of open and held demo issues.
+* 🗂️ Template panel with skeleton placeholders while loading.
+* 🌗 Theme toggle with persisted preference (localStorage) and flash‑free early apply script.
+* ♻️ Optimistic removal on issue close (undo concept noted in roadmap).
+* 🛡️ PAT stored only locally (never leaves the browser except to GitHub API endpoints).
+* ♿ Accessibility baseline: skip link, aria‑live regions, accessible labels, reduced‑motion handling, logical heading order, distinguishable focus.
+* 🧪 Safe against React Strict Mode double invokes via simple memoized cache.
+
+### Demo Repository Link Extraction
+
+The UI conditionally shows an "Open" button for each demo issue only when a comment exists containing the phrase `Demo Creation Successful` (case‑insensitive). The first GitHub repository URL (`https://github.com/owner/name`) in that comment is parsed and used as the target. If absent or invalid the Open button is hidden. This relies on external automation that posts the provisioning success comment.
+
+See `listUserDemoIssues` in `lib/github.ts` to adapt.
+
+## Personal Access Token (PAT)
 
 The PAT is:
-* Entered and stored only in the browser (`localStorage` key `gh_demo_pat`).
-* Used exclusively for authenticated REST calls from the client (Octokit with `auth`).
-* Never sent to any custom server—only to the GitHub API endpoints.
+* Entered and stored only in the browser (`localStorage` key: `gh_demo_pat`).
+* Used exclusively for authenticated REST calls (Octokit `auth`).
+* Never proxied through a custom backend.
 
-Recommended minimal fine-grained token permissions (for the single target repo):
-* Contents: Read (to list and read template files)
-* Issues: Read & Write (to create/close demo issues)
+Minimum fine‑grained repository permissions:
+* Contents: Read
+* Issues: Read & Write
 
-Revoke or regenerate the token immediately if exposed. To "logout" the app, use the UI control or remove the key from browser storage.
+Rotate or revoke the token immediately if exposed. To clear credentials use the UI control or manually remove the localStorage key.
 
 ## Quick Start
-
-Install dependencies and start the dev server:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Visit http://localhost:3000 and paste your fine‑grained PAT.
+Navigate to http://localhost:3000 and paste your PAT when prompted.
 
-If you change the target repository in code, ensure you also adjust required token scopes.
+If you reconfigure the target repository, re‑evaluate needed permissions.
 
 ## How It Works
 
-### Issue Template Discovery
+### 1. Template Discovery
 
-The application enumerates `.github/ISSUE_TEMPLATE` using the GitHub Contents API: `GET /repos/{owner}/{repo}/contents/.github/ISSUE_TEMPLATE`.
+Uses the Contents API to list `.github/ISSUE_TEMPLATE` and individually fetch YAML / Markdown template files. YAML Issue Forms: reads `name` + `description` (or `about` fallback). Markdown: optional YAML front‑matter parsed for `name` / `description`.
 
-For each file with an extension in `(.yml|.yaml|.md)` it then retrieves the file's content (again via the Contents API, not the `download_url`) and parses:
-* YAML Issue Form templates: reads `name`, `description` (or `about` fallback). Structured `body` fields are not rendered in the UI.
-* Markdown templates: optional YAML front‑matter (fields: `name`, `about`/`description`); remainder kept as body text.
+### 2. Issue Creation Flow
 
-This avoids relying on raw unauthenticated file URLs and ensures consistent authentication / rate limit usage. It also future‑proofs against private repo usage where raw URLs may fail without proper token context.
+Rather than constructing the issue body client‑side, the app sends you to the GitHub new‑issue UI with `?template=` so you benefit from native validation and form UX. After submitting, the issue will appear automatically (periodic refresh) or immediately after clicking Refresh.
 
-### Creating a Demo Issue
+### 3. Listing & State Management
 
-Creation opens the GitHub UI (template picker) in a new tab: 
+* Filters to open issues labeled `demo` (limit 50) for brevity.
+* Hold toggle adds/removes the `demo::lifecycle_hold` label.
+* Close action calls the Issues Update endpoint then optimistically removes the item from the UI.
+* Basic polling + manual refresh keep data fresh; transient delays are surfaced with a small explanatory message.
+* Relative times computed client‑side from `updated_at` / `created_at`.
 
-`https://github.com/octodemo/bootstrap/issues/new?template=<filename>`
+### 4. Link Extraction
 
-You finalize and submit there. A delayed refresh (or manual reload) pulls it back into the dashboard. (Earlier iterations created issues directly via API; browser-based UX was chosen to preserve the full template/form experience.)
+Parses a provisioning success comment for the first repository URL; hides the launch link if criteria not met, avoiding dead ends.
 
-### Demo Issues Listing
+### 5. Architecture
 
-* Only issues labeled `demo` are fetched (open state) to keep the list lean.
-* Once your user login is known, results are optionally filtered to issues you created.
-* Repository URL extraction uses a simple regex against issue body + first comment.
-* Close action calls the Issues Update endpoint to set `state=closed`.
+* Framework: Next.js (App Router) + React 18 client components.
+* Data: Octokit REST in browser only.
+* Styling: Single `app/globals.css` with design tokens, badges, skeletons, toasts, focus utilities.
+* State: LocalStorage (PAT, theme, pending ops snapshot) + ephemeral in‑memory template cache.
+* Accessibility: ARIA roles (`list`, `listitem`, `status`, `alert`), `aria-busy`, `aria-live=polite/assertive`, skip link, reduced‑motion safe animations, `sr-only` utilities.
 
-### Architecture Overview
+### 6. Caching & Rate Limits
 
-* UI: Next.js App Router + client components.
-* Data Access: Octokit REST (authenticated) from the browser only.
-* Caching: Simple in-memory (window-scoped) cache for template list keyed by `owner/repo`.
-* Styling: Global CSS (`app/globals.css`) + lightweight component structure.
-* Strict Mode: Enabled (`reactStrictMode: true`) causing double invoke of some effects in dev—cache mitigates duplicate template enumeration.
+Template metadata cached for the session (not persisted). For multi‑repo or heavier usage, consider ETag + conditional requests and/or IndexedDB. Current approach already eliminates redundant Strict Mode fetches.
 
-### Caching & Rate Limits
+## Accessibility Details
 
-Templates are read once per session unless you refresh the page (cache is not persisted). For larger sets or multi-repo expansion, consider adding `localStorage` with an ETag to revalidate. Current approach already reduces redundant network calls induced by React Strict Mode.
+| Aspect | Implementation |
+|--------|----------------|
+| Skip Navigation | Visible on focus link jumps to main content |
+| Live Updates | `aria-live` + `role=status` wrappers announce background refresh completion |
+| Toasts | `role=alert` (errors) / `role=status` (others); auto-dismiss respectful of reduced motion |
+| Loading Indicators | Skeletons `aria-hidden` with parent `aria-busy=true` until hydrated |
+| Focus Management | High-contrast outline + preserved focus ring (no global outline removal) |
+| Reduced Motion | Key animations wrapped in `@media (prefers-reduced-motion: no-preference)` |
+| Labels | PAT input uses visually hidden label + `aria-describedby` guidance |
 
-### Troubleshooting
+Further enhancements (e.g. `aria-pressed` on hold toggle, high contrast theme) tracked in roadmap.
+
+## Troubleshooting
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| No templates found | Directory missing or only non-supported files present | Add templates to `.github/ISSUE_TEMPLATE` |
-| 404s on raw URLs (older builds) | Stale bundle using `download_url` fetch | Hard refresh / clear cache; new code uses API content |
-| Hitting rate limits | Using unauthenticated requests or very frequent refresh | Provide PAT / add simple debouncing |
-| Issue not appearing after creation | Delay before refresh elapsed too soon | Click manual refresh (planned feature) |
+| No templates found | Directory missing or only unsupported files | Add templates under `.github/ISSUE_TEMPLATE` |
+| Issue not appearing | Delay before next poll | Click Refresh |
+| Link button missing | Success comment absent or malformed | Ensure automation posts provisioning comment |
+| Rate limit warnings | Excessive unauthenticated calls | Provide PAT / slow refresh cadence |
 
-### Development Notes
+## Development
 
-Build & type check:
+Type check & build:
 
 ```bash
 npm run build
@@ -101,21 +141,27 @@ Lint:
 npm run lint
 ```
 
-### Limitations
+## Limitations
 
-* Single hard-coded repository (no multi-repo UI yet).
-* No pagination for issue list (limited to 50 open demo issues).
-* Issue form structured fields are not reconstructed; only metadata is shown.
+* Single repository (no UI to switch yet).
+* No pagination (cap at 50 open demo issues).
+* Issue form structured body not rendered—metadata only.
+* No undo for close / label actions (planned).
 
-## Future Improvements
+## Roadmap
 
-* Multi-repository selector & persistence.
-* LocalStorage or IndexedDB cache with ETag revalidation.
-* Retry & exponential backoff utilities for transient GitHub API errors.
-* GraphQL batching to reduce per-file content requests.
-* Optional server proxy mode to avoid exposing PAT entirely.
-* Full issue form preview rendering.
-* Manual refresh buttons for templates & issues.
+Planned / potential improvements:
+
+* Multi‑repository selector & persistence.
+* Undo action in toast for close / hold toggles.
+* High contrast / accessible color theme variant.
+* `aria-pressed` and better toggle semantics for hold button.
+* LocalStorage or IndexedDB template cache with ETag revalidation.
+* Retry & exponential backoff helpers for transient API failures.
+* GraphQL batching or conditional requests to cut REST round trips.
+* Optional lightweight proxy to eliminate PAT exposure in the browser.
+* Full issue form body preview rendering.
+* Advanced filtering (by age, hold status) & sorting.
 
 ## License
 

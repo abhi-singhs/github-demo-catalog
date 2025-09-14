@@ -118,16 +118,48 @@ export async function listUserDemoIssues(octokit: Octokit, owner: string, repo: 
   const { data } = await octokit.rest.issues.listForRepo(q);
   // Optionally filter by creator
   const filtered = currentLogin ? data.filter(i => i.user?.login === currentLogin) : data;
-  // fetch first comment to parse repo link (optional future use)
+  // For each issue, fetch comments to locate the special success comment containing the repo URL.
+  // Heuristic: look for a comment whose body includes the phrase "Demo Creation Successful" (case-insensitive).
+  // When found, extract the first GitHub repo URL of the form https://github.com/owner/name and attach it as _demoRepoUrl.
   for (const issue of filtered as any[]) {
     try {
-      const comments = await octokit.rest.issues.listComments({ owner, repo, issue_number: issue.number, per_page: 1 });
-      (issue as any)._firstComment = comments.data[0]?.body || '';
-    } catch { /* ignore */ }
+      // We fetch up to 100 comments (GitHub API max per page). Demo issues are expected to have few comments.
+      const comments = await octokit.rest.issues.listComments({ owner, repo, issue_number: issue.number, per_page: 100 });
+      const successComment = comments.data.find(c => /demo creation successful/i.test(c.body || ''));
+      if (successComment) {
+        const match = (successComment.body || '').match(/https?:\/\/(?:www\.)?github\.com\/[\w.-]+\/[\w.-]+/);
+        if (match) {
+          (issue as any)._demoRepoUrl = match[0];
+        }
+      }
+    } catch { /* ignore individual issue errors to avoid failing the whole list */ }
   }
   return filtered;
 }
 
 export async function closeIssue(octokit: Octokit, owner: string, repo: string, issue_number: number) {
   await octokit.rest.issues.update({ owner, repo, issue_number, state: 'closed' });
+}
+
+const HOLD_LABEL = 'demo::lifecycle_hold';
+
+// Add the hold label to an issue (idempotent: if already present, no error)
+export async function addHoldToIssue(octokit: Octokit, owner: string, repo: string, issue_number: number) {
+  // We can use addLabels which appends without overwriting existing labels
+  await octokit.rest.issues.addLabels({ owner, repo, issue_number, labels: [HOLD_LABEL] });
+}
+
+// Remove the hold label from an issue if present. Ignore 404 (label missing) errors silently.
+export async function removeHoldFromIssue(octokit: Octokit, owner: string, repo: string, issue_number: number) {
+  try {
+    await octokit.rest.issues.removeLabel({ owner, repo, issue_number, name: HOLD_LABEL });
+  } catch (e: any) {
+    if (e?.status !== 404) throw e; // rethrow unexpected errors
+  }
+}
+
+// Utility to test if issue is on hold given its labels array
+export function issueIsOnHold(issue: any): boolean {
+  if (!issue || !Array.isArray(issue.labels)) return false;
+  return issue.labels.some((l: any) => (typeof l === 'string' ? l : l.name) === HOLD_LABEL);
 }

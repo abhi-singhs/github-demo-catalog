@@ -30,8 +30,16 @@ export default function TokenForm({ onToken, token: activeToken, onLogout }: Pro
 
   return (
     <form onSubmit={submit} className="token-form">
-      <input type="password" placeholder="Fine-grained PAT" value={token} onChange={e=>setToken(e.target.value)} className="input" />
-      <p className="hint">Token stored locally in this browser (localStorage).</p>
+      <label htmlFor="pat-input" className="sr-only">Fine-grained Personal Access Token</label>
+      <input
+        id="pat-input"
+        type="password"
+        placeholder="Fine-grained PAT"
+        aria-describedby="pat-hint"
+        value={token}
+        onChange={e=>setToken(e.target.value)}
+        className="input" />
+      <p id="pat-hint" className="hint">Token stored locally in this browser (localStorage).</p>
       <button className="btn btn-primary" type="submit" disabled={!token}>Set Token</button>
     </form>
   );
