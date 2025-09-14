@@ -141,6 +141,29 @@ Lint:
 npm run lint
 ```
 
+## Deployment (GitHub Pages)
+
+This project is configured for static export (`next.config.js` sets `output: 'export'`). A GitHub Actions workflow (`.github/workflows/deploy.yml`) builds and publishes to GitHub Pages whenever `main` is updated.
+
+Steps:
+1. Enable GitHub Pages in the repository settings: Source = GitHub Actions.
+2. Push or merge to `main`.
+3. Workflow builds the site and uploads `./out` as the Pages artifact.
+4. Site is served at: `https://<your-username>.github.io/github-demo-catalog/`
+
+If you fork & rename the repository:
+* Update `REPO_NAME` env or set `BASE_PATH`/`REPO_NAME` in the workflow.
+* (Optional) Adjust `repoName` constant in `next.config.js` if not using env var.
+
+Local test of export:
+
+```bash
+npm run build
+npx serve out
+```
+
+Then open the printed localhost URL (remember assets expect root unless you simulate the basePath).
+
 ## Limitations
 
 * Single repository (no UI to switch yet).

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "deploy": "next build && touch out/.nojekyll && echo 'Deployment artifacts prepared in ./out'",
     "start": "next start",
     "lint": "next lint"
   },
