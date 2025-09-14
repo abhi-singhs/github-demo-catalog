@@ -72,14 +72,6 @@ Thumbs.db
 # *.jpeg
 # *.gif
 
-# --- Package manager lockfiles ---
-# NOTE: Usually you COMMIT lockfiles for reproducible builds.
-# This repo previously ignored package-lock.json; retained below.
-package-lock.json
-# If using Yarn or pnpm and you wish to ignore (not typical):
-# yarn.lock
-# pnpm-lock.yaml
-
 # --- Temporary / Scratch ---
 tmp/
 temp/
